@@ -1,52 +1,49 @@
-using System.Collections;
 using UnityEngine;
 
 public class LipSyncController : MonoBehaviour
 {
-    public SkinnedMeshRenderer faceMesh;
-    public int mouthBlendshapeIndex = 6;  
-    public float openAmount = 85f;
-    public float speed = 12f;
+    public SkinnedMeshRenderer faceMesh;      // Mouth  (MTH_DEF)
+    public int mouthBlendshapeIndex = 6;     
+    public float sensitivity = 65f;           
+    public float smoothSpeed = 10f;           
 
-    private bool talking = false;
+    private AudioSource audioSource;
+    private float[] samples = new float[64];  
+    private float currentMouthValue = 0f;
 
-    public void StartLipSync(AudioSource audio)
+    public void StartLipSync(AudioSource source)
     {
-        if (!talking)
-            StartCoroutine(LipRoutine(audio));
+        audioSource = source;
+        enabled = true;
     }
 
     public void StopLipSync()
     {
-        talking = false;
+        enabled = false;
         faceMesh.SetBlendShapeWeight(mouthBlendshapeIndex, 0);
     }
 
-    IEnumerator LipRoutine(AudioSource audio)
+    void Update()
     {
-        talking = true;
+        if (audioSource == null || !audioSource.isPlaying)
+            return;
 
-        while (audio != null && audio.isPlaying)
+        // Read audio spectrum
+        audioSource.GetSpectrumData(samples, 0, FFTWindow.BlackmanHarris);
+
+        // Take the loudest frequency band
+        float max = 0f;
+        for (int i = 0; i < samples.Length; i++)
         {
-            yield return AnimateMouth(openAmount, 0.08f);
-            yield return AnimateMouth(0, 0.08f);
+            if (samples[i] > max) max = samples[i];
         }
 
-        faceMesh.SetBlendShapeWeight(mouthBlendshapeIndex, 0);
-        talking = false;
-    }
+        // Convert volume to blendshape weight
+        float targetValue = Mathf.Clamp01(max * sensitivity) * 100f;
 
-    IEnumerator AnimateMouth(float target, float dur)
-    {
-        float start = faceMesh.GetBlendShapeWeight(mouthBlendshapeIndex);
-        float t = 0f;
+        // Smooth mouth movement
+        currentMouthValue = Mathf.Lerp(currentMouthValue, targetValue, Time.deltaTime * smoothSpeed);
 
-        while (t < dur)
-        {
-            t += Time.deltaTime * speed;
-            float weight = Mathf.Lerp(start, target, t / dur);
-            faceMesh.SetBlendShapeWeight(mouthBlendshapeIndex, weight);
-            yield return null;
-        }
+        faceMesh.SetBlendShapeWeight(mouthBlendshapeIndex, currentMouthValue);
     }
 }

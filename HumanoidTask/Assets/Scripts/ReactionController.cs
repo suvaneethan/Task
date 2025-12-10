@@ -12,14 +12,31 @@ public class ReactionController : MonoBehaviour
     public LipSyncController lipSync;
     public TextMeshProUGUI charState;
 
+    public SkinnedMeshRenderer faceMesh;   // Assign MTH_DEF
+
     private bool isRunning = false;
     private bool queued = false;
+
+    // Blendshape indices
+    int smile1, smile2;
+    int sad1, conf1, angry1;
+    int jawOpen;
 
     void Start()
     {
         audioSource.clip = dialogueClip;
         playButton.onClick.AddListener(OnPlayPressed);
+
         charState.text = "Idle";
+
+        // Read blendshape indices from mesh
+        smile1 = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_SMILE1");
+        smile2 = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_SMILE2");
+        sad1 = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_SAP");   // sad mouth
+        conf1 = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_CONF");  // worried brows
+        angry1 = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_ANG1");  // slight pinch
+        jawOpen = faceMesh.sharedMesh.GetBlendShapeIndex("MTH_A");
+
     }
 
     void OnPlayPressed()
@@ -37,61 +54,133 @@ public class ReactionController : MonoBehaviour
         isRunning = true;
         queued = false;
 
-        // Reset audio
         audioSource.Stop();
         audioSource.time = 0f;
 
-        // Start audio + lip sync FIRST
         audioSource.Play();
         lipSync.StartLipSync(audioSource);
         charState.text = "Speaking...";
 
-        // While audio plays, run emotion sequence in parallel
+        // Run emotion sequence in parallel with audio
         yield return StartCoroutine(RunEmotionSequence());
 
-        // Wait until audio finishes
+        // Wait until audio fully finishes
         while (audioSource.isPlaying)
             yield return null;
 
+        // Stop lip sync
         lipSync.StopLipSync();
         charState.text = "Idle";
 
+        // Reset audio for next button press
+        audioSource.Stop();
+        audioSource.time = 0f;
+
         isRunning = false;
 
+        // If button was pressed during playback → auto replay
         if (queued)
+        {
+            queued = false;
             StartCoroutine(FullSequence());
+        }
     }
 
     IEnumerator RunEmotionSequence()
     {
-        // Smile
-        yield return PlayAnimation("SmileTrigger", "Smile", "Smile");
+        // SMILE
+        yield return PlaySmile();
+        yield return WaitForState("Idle");
 
-        // Sad
-        yield return PlayAnimation("SadTrigger", "Sad", "Sad");
+        // SAD
+        yield return PlaySad();
+        yield return WaitForState("Idle");
 
-        // Smile again
-        yield return PlayAnimation("SmileTrigger", "Smile", "Smile");
+        // SMILE AGAIN
+        yield return PlaySmile();
+        yield return WaitForState("Idle");
 
-        // Sad again
-        yield return PlayAnimation("SadTrigger", "Sad", "Sad");
+        // SAD AGAIN
+        yield return PlaySad();
+        yield return WaitForState("Idle");
     }
 
-    IEnumerator PlayAnimation(string trigger, string stateName, string stateText)
+    // -------------------------------
+    // EMOTION FUNCTIONS
+    // -------------------------------
+
+    IEnumerator PlaySmile()
     {
-        charState.text = stateText;
+        charState.text = "Smile";
 
-        animator.ResetTrigger("SmileTrigger");
-        animator.ResetTrigger("SadTrigger");
+        ClearAllBlendshapes();
+        SetExpression(smile1, 85f);
+        SetExpression(smile2, 60f);
 
-        animator.SetTrigger(trigger);
+        animator.SetTrigger("SmileTrigger");
 
-        // Wait for animation to start
-        while (!animator.GetCurrentAnimatorStateInfo(0).IsName(stateName))
+        while (!animator.GetCurrentAnimatorStateInfo(0).IsName("Smile"))
             yield return null;
 
-        // Wait for animation duration
         float len = animator.GetCurrentAnimatorStateInfo(0).length;
         yield return new WaitForSeconds(len);
+
+        ClearAllBlendshapes();
+    }
+
+    IEnumerator PlaySad()
+    {
+        charState.text = "Sad";
+
+        ClearAllBlendshapes();
+
+        // Sad mouth droop
+        SetExpression(sad1, 90f);
+
+        // Lower brows for dull/tired look
+        if (conf1 >= 0) SetExpression(conf1, 40f);
+
+        // Very slight brow pinch for emotional depth
+        if (angry1 >= 0) SetExpression(angry1, 8f);
+
+        // NEW → Slight jaw open for dull/sad look
+        if (jawOpen >= 0) SetExpression(jawOpen, 18f);
+
+        animator.SetTrigger("SadTrigger");
+
+        while (!animator.GetCurrentAnimatorStateInfo(0).IsName("Sad"))
+            yield return null;
+
+        float len = animator.GetCurrentAnimatorStateInfo(0).length;
+        yield return new WaitForSeconds(len);
+
+        ClearAllBlendshapes();
+    }
+
+
+    // -------------------------------
+    // BLENDSHAPE HELPERS
+    // -------------------------------
+
+    void SetExpression(int index, float value)
+    {
+        if (index >= 0)
+            faceMesh.SetBlendShapeWeight(index, value);
+    }
+
+    void ClearAllBlendshapes()
+    {
+        for (int i = 0; i < faceMesh.sharedMesh.blendShapeCount; i++)
+            faceMesh.SetBlendShapeWeight(i, 0);
+    }
+
+    // -------------------------------
+    // WAIT FOR STATE
+    // -------------------------------
+
+    IEnumerator WaitForState(string stateName)
+    {
+        while (!animator.GetCurrentAnimatorStateInfo(0).IsName(stateName))
+            yield return null;
     }
 }

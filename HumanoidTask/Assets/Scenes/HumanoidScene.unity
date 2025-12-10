@@ -154,8 +154,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   faceMesh: {fileID: 853949662}
   mouthBlendshapeIndex: 6
-  openAmount: 80
-  speed: 0.4
+  sensitivity: 65
+  smoothSpeed: 10
 --- !u!114 &319921698
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -174,6 +174,7 @@ MonoBehaviour:
   dialogueClip: {fileID: 8300000, guid: cdf17e12f799c5847b21d8aa595775b8, type: 3}
   lipSync: {fileID: 319921697}
   charState: {fileID: 1185948629}
+  faceMesh: {fileID: 853949662}
 --- !u!4 &319921699
 Transform:
   m_ObjectHideFlags: 0
